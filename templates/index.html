@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление ПК</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            position: relative;
+        }
+
+        .loader-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+        }
+
+        .loader {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 999;
+        }
+
+        .notification div {
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        .bg-green-300 {
+            background-color: #48bb78;
+            color: #fff;
+        }
+
+        .bg-red-300 {
+            background-color: #f56565;
+            color: #fff;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #fff;
+            padding: 20px;
+            z-index: 1000;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .modal input {
+            width: calc(100% - 20px);
+            margin: 10px 0;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .modal button {
+            background-color: #4caf50;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .modal button.close {
+            background-color: #f44336;
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5); /* полупрозрачный черный цвет */
+            display: none;
+            z-index: 998; /* должно быть ниже чем z-index модального окна, но выше чем у обычной подложки */
+        }
+
+        .modal.active,
+        .modal-update.active {
+            display: block;
+        }
+        td.checkbox-cell {
+            text-align: center;
+        }
+        th.sortable {
+            cursor: pointer;
+        }
+
+        th.sortable::after {
+            content: '↑';
+            opacity: 0;
+        }
+
+        th.sorted-asc::after {
+            content: '↑';
+            opacity: 1;
+        }
+
+        th.sorted-desc::after {
+            content: '↓';
+            opacity: 1;
+        }
+        .wide-modal {
+            max-width: 600px;
+        }
+
+        .wide-input {
+            width: calc(100% - 20px);
+            margin: 10px 0;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .flex {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start; /* Изменено с align-items: center; */
+        }
+
+        .items-center {
+            align-items: center;
+        }
+
+        /* Добавленные стили для размещения текста слева от чекбокса */
+        .flex.items-center label {
+            margin-right: 10px;
+        }
+
+        .flex.items-center label, .flex.items-center input {
+            margin-bottom: 0; /* Изменено с order: -1; */
+        }
+         
+    </style>
+</head>
+<body class="bg-gray-100">
+
+<!-- ... Кружок прогрузки  ... -->
+<div class="loader-container" id="loaderContainer"> 
+    <div class="loader"></div>
+</div>
+
+<!-- ... Верхнее поле  ... -->
+<header class="bg-gray-800 text-white p-4 text-center flex justify-between items-center">
+    <div>
+    </div>
+    <div>
+        <h1 class="text-3xl">Управление ПК</h1>
+    </div>
+    <div>
+        <a href="/logout" class="text-white">Выход</a>
+    </div>
+</header>
+
+<!-- ... Глобальные кнопки  ... -->
+<nav class="bg-gray-200 p-4 text-center">
+    <button class="btn" onclick="openModal()">Добавить ПК</button>
+    <span class="mx-2">|</span>
+    <span class="mx-2">Выбранное:</span>
+    <button class="btn" onclick="openUpdateModal()">Обновить</button>
+    <span class="mx-2">|</span>
+    <button class="btn" onclick="rebootAllComputers()">Перезагрузить</button>
+    <span class="mx-2">|</span>
+    <button class="btn" onclick="shutdownAllComputers()">Выключить</button>
+    <span class="mx-2">|</span>
+    <button class="btn" onclick="poweronAllComputers()">Включить</button>
+    <span class="mx-2">|</span>
+    <button class="btn" onclick="openExecuteModal()">Выполнить</button>
+</nav>
+
+<!-- ... Таблица с данными ... -->
+<div class="container mx-auto p-4">
+    <div id="notification" class="notification"></div>
+    <table class="min-w-full border border-gray-300">
+        <thead>
+            <tr>
+                <th class="border border-gray-300 p-2">
+                    <input type="checkbox" id="selectAllCheckbox" onclick="selectAllRows()">
+                </th>
+                <th class="border border-gray-300 p-2 sortable" data-column="name" onclick="sortColumn('name')">Имя ПК</th>
+                <th class="border border-gray-300 p-2 sortable" data-column="ip" onclick="sortColumn('ip')">IP</th>
+                <th class="border border-gray-300 p-2" data-column="ip">MAC</th>
+                <th class="border border-gray-300 p-2 sortable" data-column="time_update" onclick="sortColumn('time_update')">Время обновления</th>
+                <th class="border border-gray-300 p-2">Действия</th>
+            </tr>
+        </thead>
+        <tbody id="computer-list"></tbody>
+    </table>
+</div>
+
+<!-- ... Модальное окно для выполнения команд ... -->
+<div id="executeModal" class="modal wide-modal">
+    <h2 class="text-2xl mb-4">Выполнить команду</h2>
+    <div class="flex justify-between items-center">
+        <div>
+            <label for="cmdType">Выберите тип команды:</label>
+            <select id="cmdType" name="cmdType" class="border">
+                <option value="cmd">CMD</option>
+                <option value="powershell">PowerShell</option>
+            </select>
+        </div>
+        <div class="flex items-center"> <!-- Изменение здесь -->
+            <label for="loggingCheckbox">Logging</label>
+            <input type="checkbox" id="loggingCheckbox">
+        </div>
+    </div>
+    <br>
+    <label for="command">Команда:</label>
+    <textarea id="command" name="command" class="border wide-input" rows="4"></textarea>
+    <br>
+    <button onclick="executeCommand()">Выполнить</button>
+    <button class="close" onclick="closeExecuteModal()">Закрыть</button>
+</div>
+
+<!-- ... Модальное окно для добваление ПК  ... -->
+<div id="myModal" class="modal">
+    <h2 class="text-2xl mb-4">Добавить ПК</h2>
+    <label for="name">Имя ПК:</label>
+    <input type="text" id="name" name="name" class="border">
+    <br>
+    <label for="ip">IP:</label>
+    <input type="text" id="ip" name="ip" class="border">
+    <br>
+    <button onclick="addComputer()">Добавить</button>
+    <button class="close" onclick="closeModal()">Закрыть</button>
+</div>
+
+<!-- ... Модальное окно для обновление выбранного  ... -->
+<div id="updateModal" class="modal">
+    <div class="bg-white p-8 rounded-lg text-center">
+        <h2 class="text-2xl mb-4">Обновление датасетов</h2>
+        <!-- Добавленные стили для таблицы с прокруткой -->
+        <div style="max-height: 300px; overflow-y: auto;">
+            <table class="update-table mx-auto">
+                <thead>
+                    <tr>
+                        <th class="pr-6 pl-6 text-center">Имя ПК</th>
+                        <th class="pr-6 pl-6 text-center">Статус</th>
+                    </tr>
+                </thead>
+                <tbody id="updateStatus"></tbody>
+            </table>
+        </div>
+        <!-- Конец добавленных стилей -->
+        <button class="close mt-4" onclick="closeUpdateModal()">Закрыть</button>
+    </div>
+</div>
+
+<div id="overlay" class="overlay"></div>
+
+<script>
+
+    //Параметры сортировки по умолчанию
+    let sortBy = 'name';
+    let sortDirection = 'asc';
+
+    function sortColumn(column) {
+        if (sortBy === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortBy = column;
+            sortDirection = 'asc';
+        }
+
+        update();
+    }
+
+    //функция сортировки
+    function compare(a, b) {
+        const valueA = a[sortBy];
+        const valueB = b[sortBy];
+
+        if (valueA < valueB) {
+            return sortDirection === 'asc' ? -1 : 1;
+        }
+        if (valueA > valueB) {
+            return sortDirection === 'asc' ? 1 : -1;
+        }
+        return 0;
+    }
+
+    //обновление иконок сортировки
+    function updateSortIcons() {
+        const sortableHeaders = document.querySelectorAll('.sortable');
+        sortableHeaders.forEach(header => {
+            header.classList.remove('sorted-asc', 'sorted-desc');
+        });
+
+        const activeHeader = document.querySelector(`.sortable[data-column="${sortBy}"]`);
+        activeHeader.classList.add(`sorted-${sortDirection}`);
+    }
+
+    //Отображение загрузки
+    function showLoader() {
+        document.getElementById('loaderContainer').style.display = 'flex';
+    }
+
+    //Скрытие загрузки  
+    function hideLoader() {
+        document.getElementById('loaderContainer').style.display = 'none';
+    }
+
+    //Отображение уведомлений
+    function showNotification(message, backgroundColor) {
+        const notificationElement = document.getElementById('notification');
+        const notificationDiv = document.createElement('div');
+        notificationDiv.innerHTML = `<div class="${backgroundColor} p-4 rounded">${message}</div>`;
+        notificationElement.appendChild(notificationDiv);
+        setTimeout(() => {
+            notificationDiv.style.opacity = 0;
+            setTimeout(() => {
+                notificationElement.removeChild(notificationDiv);
+            }, 500);
+        }, 5000);
+    }
+
+
+    //Блокировка неактивной части экрана при открытии модального окна
+    function openModal() {
+        document.getElementById('myModal').classList.add('active');
+        document.getElementById('overlay').style.display = 'block';
+    }
+
+    //Разблокировка экрана при закрытии модального окна
+    function closeModal() {
+        document.getElementById('myModal').classList.remove('active');
+        document.getElementById('overlay').style.display = 'none';
+    }
+
+
+    async function addComputer() {
+        const name = document.getElementById('name').value;
+        const ip = document.getElementById('ip').value;
+        showLoader(); //выводи загрузку
+        try {
+            const response = await fetch(`/client?name=${encodeURIComponent(name)}&ip=${encodeURIComponent(ip)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            hideLoader(); //скрываем загрузку
+            const responseData = await response.json();
+            if (responseData.STATUS === 'OK') {
+                showNotification(`${name} успешно добавлен!`, 'bg-green-300');
+                closeModal();
+                update();
+            } else {
+                showNotification(`Ошибка при добавлении: ${JSON.stringify(responseData.DATA)}`, 'bg-red-300');
+                console.error('Ошибка при добавлении:', responseData.DATA);
+            }
+        } catch (error) {
+            hideLoader(); //скрываем загрузку
+            showNotification(`Ошибка при добавлении: ${error.message}`, 'bg-red-300');
+            console.error('Ошибка при добавлении:', error);
+        }
+    }
+
+    const checkboxStates = {};
+
+    // Функция для обновления состояния чекбоксов
+    function updateCheckboxState(name, checked) {
+        checkboxStates[name] = checked;
+    }
+
+    // Функция для восстановления состояния чекбоксов после обновления данных
+    function restoreCheckboxState() {
+        const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+        computerListCheckboxes.forEach(checkbox => {
+            const computerName = checkbox.dataset.name;
+            checkbox.checked = checkboxStates[computerName] || false;
+        });
+    }
+
+    
+    //Основная функция для получения и обновления данных для таблицы
+    async function update() {
+        showLoader();
+        const notificationElement = document.getElementById('notification');
+        try {
+            const response = await fetch('/client');
+            const responseData = await response.json();
+            hideLoader();
+            if (responseData.STATUS === 'OK') {
+                const data = responseData.DATA;
+                const computerList = document.getElementById('computer-list');
+                computerList.innerHTML = '';
+                data.sort(compare);
+                data.forEach(item => {
+
+                    //Поулчаем дату и меняем вид отображения
+                    const date = new Date(item.time_update);
+                    const formattedDate = `${padZero(date.getDate())}.${padZero(date.getMonth() + 1)}.${date.getFullYear()} ${padZero(date.getHours())}:${padZero(date.getMinutes())}`;
+                    
+                    //колонка чекбокса для выбора
+                    const row = document.createElement('tr');
+                    const checkboxCell = document.createElement('td');
+                    checkboxCell.classList.add('checkbox-cell'); // Добавляем класс для центрирования
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkboxCell.appendChild(checkbox);
+                    row.appendChild(checkboxCell);
+
+                    checkbox.addEventListener('change', () => {
+                        handleCheckboxChange(item.name, checkbox.checked);
+                    });
+
+                     // Устанавливаем атрибут dataset для чекбокса с именем компьютера
+                    checkbox.dataset.name = item.name;
+                    
+                    // Устанавливаем состояние чекбокса из объекта checkboxStates
+                    checkbox.checked = checkboxStates[item.name] || false;
+
+                    // Обработчик события для чекбокса
+                    checkbox.addEventListener('change', () => {
+                        handleCheckboxChange(item.name, checkbox.checked);
+                        // Обновляем состояние чекбокса в объекте checkboxStates
+                        updateCheckboxState(item.name, checkbox.checked);
+                    });
+
+                    //колонка с именем
+                    const nameCell = document.createElement('td');
+                    nameCell.textContent = item.name;
+                    nameCell.classList.add('text-center');
+                    row.appendChild(nameCell);
+
+                    //колонка с IP
+                    const ipCell = document.createElement('td');
+                    ipCell.textContent = item.ip;
+                    ipCell.classList.add('text-center');
+                    row.appendChild(ipCell);
+
+                    //колонка с MAC
+                    const macCell = document.createElement('td');
+                    macCell.textContent = item.mac;
+                    macCell.classList.add('text-center');
+                    row.appendChild(macCell);
+
+                    //Колонка со временем обновления
+                    const timeUpdateCell = document.createElement('td');
+                    timeUpdateCell.textContent = formattedDate;
+                    timeUpdateCell.classList.add('text-center');
+                    row.appendChild(timeUpdateCell);
+                    
+                    //Колонка с кнопками
+                    const actionsCell = document.createElement('td');
+                    actionsCell.classList.add('text-center');
+
+                    //включение суперклиента
+                    const superuserButton = document.createElement('button');
+                    superuserButton.innerHTML = '<i class="fas fa-hdd"></i>';
+                    superuserButton.classList.add('btn', 'mx-1');
+                    const iconElement = superuserButton.querySelector('i');
+
+                    //Кнопка становится красной если суперклиент включен
+                    if (item.superuser) {
+                        iconElement.classList.add('text-red-500');
+                        superuserButton.title = 'Выключить superclient'; // подсказка при наведении
+                    } else {
+                        superuserButton.title = 'Включить superclient'; // подсказка при наведении
+                    }
+
+                    //Подтверждения запроса
+                    superuserButton.addEventListener('click', async () => {
+                    const actionVerb = item.superuser ? 'выключить' : 'включить';
+                    const confirmResult = confirm(`Вы уверены, что хотите ${actionVerb} superuser для ${item.name}?`);
+
+                    if (confirmResult) {
+                        showLoader();
+                        const invertedSuperuser = !item.superuser;
+                        try {
+                            const superuserResponse = await fetch(`/superuser?name=${encodeURIComponent(item.name)}&superuser=${invertedSuperuser}`, { method: 'POST' });
+                            const superuserResponseData = await superuserResponse.json();
+                            hideLoader();
+                            if (superuserResponseData.STATUS === 'OK') {
+                                const statusMessage = !item.superuser ? `${item.name} superclient включен` : `${item.name} superclient выключен`;
+                                showNotification(`${statusMessage}`, 'bg-green-300');
+                                update();
+                            } else {
+                                showNotification(`Ошибка при обновлении superclient: ${JSON.stringify(superuserResponseData.DATA)}`, 'bg-red-300');
+                                console.error('Ошибка при обновлении superclient:', superuserResponseData.DATA);
+                            }
+                        } catch (error) {
+                            hideLoader();
+                            showNotification(`Ошибка при обновлении superclient: ${error.message}`, 'bg-red-300');
+                            console.error('Ошибка при обновлении superclient:', error);
+                            }
+                        }
+                    });
+
+
+                    //Обнолвение датасета
+                    const updateButton = document.createElement('button');
+                    updateButton.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i>';
+                    updateButton.classList.add('btn', 'mx-1');
+                    updateButton.title = 'Обновить датасет'; 
+                    updateButton.addEventListener('click', async () => {
+                        showLoader();
+                        try {
+                            const updateResponse = await fetch(`/update_dataset/${item.name}`, { method: 'GET' });
+                            const updateResponseData = await updateResponse.json();
+                            hideLoader();
+                            if (updateResponseData.STATUS === 'OK') {
+                                showNotification(`${item.name} успешно обновлен!`, 'bg-green-300');
+                                update();
+                            } else {
+                                showNotification(`Ошибка при обновлении датасета: ${JSON.stringify(updateResponseData.DATA)}`, 'bg-red-300');
+                                console.error('Ошибка при обновлении датасета:', updateResponseData.DATA);
+                            }
+                        } catch (error) {
+                            hideLoader();
+                            showNotification(`Ошибка при обновлении датасета: ${error.message}`, 'bg-red-300');
+                            console.error('Ошибка при обновлении датасета:', error);
+                        }
+                    });
+
+                    //Удалить датасет
+                    const deleteButton = document.createElement('button');
+                    deleteButton.innerHTML = '<i class="fas fa-trash"></i>';
+                    deleteButton.classList.add('btn', 'mx-1');
+                    deleteButton.title = 'Удалить ПК'; 
+                    deleteButton.addEventListener('click', async () => {
+                        const confirmResult = confirm('Вы уверены, что хотите удалить ПК?');
+                        if (confirmResult) {
+                            showLoader();
+                            try {
+                                const deleteResponse = await fetch(`/client/${item.name}`, { method: 'DELETE' });
+                                const deleteResponseData = await deleteResponse.json();
+                                hideLoader();
+                                if (deleteResponseData.STATUS === 'OK') {
+                                    showNotification(`${item.name} успешно удален!`, 'bg-green-300');
+                                    update();
+                                } else {
+                                    showNotification(`Ошибка при удалении ПК:${JSON.stringify(deleteResponseData.DATA)}`, 'bg-red-300');
+                                    console.error('Ошибка при удалении ПК:', deleteResponseData.DATA);
+                                }
+                            } catch (error) {
+                                hideLoader();
+                                showNotification(`Ошибка при удалении ПК: ${error.message}`, 'bg-red-300');
+                                console.error('Ошибка при удалении ПК:', error);
+                            }
+                        }
+                    });
+
+                    //Перезагрука ПК
+                    const rebootButton = document.createElement('button');
+                    rebootButton.innerHTML = '<i class="fas fa-sync-alt"></i>';
+                    rebootButton.classList.add('btn', 'mx-1');
+                    rebootButton.title = 'Перезагрузить ПК'; 
+                    rebootButton.addEventListener('click', async () => {
+                        const confirmResult = confirm('Вы уверены, что хотите перезагрузить компьютер?');
+                        if (confirmResult) {
+                            showLoader();
+                            try {
+                                const rebootResponse = await fetch(`/reboot/${item.name}`, { method: 'GET' });
+                                const rebootResponseData = await rebootResponse.json();
+                                hideLoader();
+                                if (rebootResponseData.STATUS === 'OK') {
+                                    showNotification(`${item.name} отправлена команда на перезагрузку!`, 'bg-green-300');
+                                } else {
+                                    showNotification(`Ошибка при отправки команды перезагрузки: ${JSON.stringify(rebootResponseData.DATA)}`, 'bg-red-300');
+                                    console.error('Ошибка при отправки команды перезагрузки', rebootResponseData.DATA);
+                                }
+                            } catch (error) {
+                                hideLoader();
+                                showNotification(`Ошибка при отправки команды перезагрузки: ${error.message}`, 'bg-red-300');
+                                console.error('Ошибка при отправки команды перезагрузки:', error);
+                            }
+                        }
+                    });
+
+                    //Включение ПК
+                    const powerButton = document.createElement('button');
+                    powerButton.innerHTML = '<i class="fa-solid fa-power-off"></i>';
+                    powerButton.classList.add('btn', 'mx-1');
+                    const powerElement = powerButton.querySelector('i');
+                    powerButton.addEventListener('click', async () => {
+                        const confirmResult = confirm('Вы уверены, что хотите ' + (item.power ? 'выключить' : 'включить') + ' компьютер?');
+
+                        if (confirmResult) {
+                            showLoader();
+                            try {
+                                const powerEndpoint = item.power ? `/shutdown/${item.name}` : `/poweron/${item.name}`;
+                                const powerResponse = await fetch(powerEndpoint, { method: 'GET' });
+                                const powerResponseData = await powerResponse.json();
+
+                                hideLoader();
+
+                                if (powerResponseData.STATUS === 'OK') {
+                                    showNotification(`${item.name} отправлена команда на ${item.power ? 'выключение' : 'включение'}!`, 'bg-green-300');
+                                } else {
+                                    showNotification(`${JSON.stringify(powerResponseData.DATA)}`, 'bg-red-300');
+                                    console.error('Ошибка при отправке команды ' + (item.power ? 'выключения' : 'включения'), powerResponseData.DATA);
+                                }
+                            } catch (error) {
+                                hideLoader();
+                                showNotification(`Ошибка при отправке команды ${item.power ? 'выключения' : 'включения'}: ${error.message}`, 'bg-red-300');
+                                console.error('Ошибка при отправке команды ' + (item.power ? 'выключения' : 'включения'), error);
+                            }
+                        }
+                    });
+
+                    if (item.power) {
+                        // Если компьютер включен, меняем класс на зеленый иконку на зеленый цвет
+                        powerButton.classList.add('text-green-500');
+                        powerElement.classList.add('text-green-500');
+                        powerButton.title = 'Выключить ПК';
+                    } else {
+                        // Если компьютер выключен, меняем класс на красный иконку на красный цвет
+                        powerButton.classList.add('text-red-500');
+                        powerElement.classList.add('text-red-500');
+                        powerButton.title = 'Включить ПК';
+                    }
+                
+                    actionsCell.appendChild(superuserButton);
+                    actionsCell.appendChild(updateButton);
+                    actionsCell.appendChild(rebootButton);
+                    actionsCell.appendChild(powerButton);
+                    actionsCell.appendChild(deleteButton);
+
+                    row.appendChild(actionsCell);
+
+                    row.addEventListener('mouseover', () => {
+                        row.classList.add('bg-gray-200');
+                    });
+
+                    row.addEventListener('mouseout', () => {
+                        row.classList.remove('bg-gray-200');
+                    });
+
+                    computerList.appendChild(row);
+                });
+                restoreCheckboxState();
+                updateSortIcons();
+            } else {
+                showNotification(`Ошибка: данные не соответствуют ожидаемому формату.`, 'bg-red-300');
+                console.error('Ошибка: данные не соответствуют ожидаемому формату.');
+            }
+        } catch (error) {
+            hideLoader();
+            showNotification(`Ошибка при получении данных: ${error.message}`, 'bg-red-300');
+            console.error('Ошибка при получении данных:', error);
+        }
+    }
+
+    function padZero(value) {
+        return value.toString().padStart(2, '0');
+    }
+
+
+    function openUpdateModal() {
+
+        const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+        const atLeastOneCheckboxChecked = Array.from(computerListCheckboxes).some(checkbox => checkbox.checked);
+
+        if (!atLeastOneCheckboxChecked) {
+            showNotification(`Выберите хотя бы один компьютер для обновления`, 'bg-red-300');
+            return;
+        }
+
+        shouldContinueUpdate = true;
+        document.getElementById('updateModal').classList.add('active');
+        document.getElementById('overlay').style.display = 'block';
+        updateAllComputers();
+    }
+    
+    function closeUpdateModal() {
+        shouldContinueUpdate = false; // Устанавливаем флаг в false при закрытии модального окна
+        document.getElementById('updateModal').classList.remove('active');
+        document.getElementById('overlay').style.display = 'none';
+        update();
+    }
+
+    function selectAllRows() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+    const allCheckboxesChecked = Array.from(computerListCheckboxes).every(checkbox => checkbox.checked);
+
+    // Обновляем состояние чекбоксов и сохраняем его в объекте checkboxStates
+    computerListCheckboxes.forEach(checkbox => {
+        checkbox.checked = !allCheckboxesChecked;
+        handleCheckboxChange(checkbox.dataset.name, checkbox.checked);
+        updateCheckboxState(checkbox.dataset.name, checkbox.checked);
+    });
+
+    selectAllCheckbox.checked = !allCheckboxesChecked;
+}
+
+    function handleCheckboxChange(name, isChecked) {
+        const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+
+        const allCheckboxesChecked = Array.from(computerListCheckboxes).every(checkbox => checkbox.checked);
+
+        selectAllCheckbox.checked = allCheckboxesChecked;
+    }
+
+
+
+    async function updateAllComputers() {
+        const updateStatusElement = document.getElementById('updateStatus');
+        updateStatusElement.innerHTML = '';
+
+        const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+
+
+        for (let i = 0; i < computerListCheckboxes.length; i++) {
+            const checkbox = computerListCheckboxes[i];
+
+            if (checkbox.checked) {
+                const computerRow = checkbox.closest('tr');
+                const computerName = computerRow.querySelector('td:nth-child(2)').textContent; // Индекс столбца с именем компьютера
+
+                const statusCell = document.createElement('td');
+                statusCell.textContent = 'В процессе';
+                statusCell.classList.add('in-progress');
+
+                const updateRow = document.createElement('tr');
+                const computerCell = document.createElement('td');
+                computerCell.textContent = computerName;
+                updateRow.appendChild(computerCell);
+                updateRow.appendChild(statusCell);
+
+                updateStatusElement.appendChild(updateRow);
+
+                // Добавим разделительную линию после каждой строки
+                const separatorRow = document.createElement('tr');
+                const separatorCell = document.createElement('td');
+                separatorCell.setAttribute('colspan', '2');
+                separatorCell.innerHTML = '<hr class="my-2 border-gray-300">';
+                separatorRow.appendChild(separatorCell);
+                updateStatusElement.appendChild(separatorRow);
+
+                try {
+                    const updateResponse = await fetch(`/update_dataset/${encodeURIComponent(computerName)}`, { method: 'GET' });
+                    const updateResponseData = await updateResponse.json();
+
+                    if (updateResponseData.STATUS === 'OK') {
+                        statusCell.textContent = 'Успешно';
+                        statusCell.classList.remove('in-progress');
+                        statusCell.classList.add('success');
+                    } else {
+                        statusCell.textContent = `Ошибка: ${JSON.stringify(updateResponseData.DATA)}`;
+                        statusCell.classList.remove('in-progress');
+                        statusCell.classList.add('error');
+                        console.error(`Ошибка при обновлении ${computerName}:`, updateResponseData.DATA);
+                    }
+                } catch (error) {
+                    statusCell.textContent = `Ошибка: ${error.message}`;
+                    statusCell.classList.remove('in-progress');
+                    statusCell.classList.add('error');
+                    console.error(`Ошибка при обновлении ${computerName}:`, error);
+                }
+            }
+        }
+    }
+
+    async function rebootAllComputers() {
+        const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+        const selectedComputers = Array.from(computerListCheckboxes).filter(checkbox => checkbox.checked);
+
+        if (selectedComputers.length === 0) {
+            showNotification('Выберите хотя бы один компьютер для перезагрузки', 'bg-red-300');
+            return;
+        }
+        const confirmResult = confirm('Вы уверены, что хотите перезагрузить выбранные компьютеры?');
+        if (!confirmResult) {
+            return;
+        }
+
+        for (let i = 0; i < computerListCheckboxes.length; i++) {
+            const checkbox = computerListCheckboxes[i];
+
+
+            if (checkbox.checked) {
+                const computerRow = checkbox.closest('tr');
+                const computerName = computerRow.querySelector('td:nth-child(2)').textContent; // Индекс столбца с именем компьютера
+
+                try {
+                    const rebootResponse = await fetch(`/reboot/${computerName}`, { method: 'GET' });
+                    const rebootResponseData = await rebootResponse.json();
+                    if (rebootResponseData.STATUS === 'OK') {
+                        showNotification(`${computerName} отправлена команда на перезагрузку!`, 'bg-green-300');
+                    } else {
+                        showNotification(`Ошибка при отправки команды перезагрузки: ${JSON.stringify(rebootResponseData.DATA)}`, 'bg-red-300');
+                        console.error('Ошибка при отправки команды перезагрузки', rebootResponseData.DATA);
+                    }
+                } catch (error) {
+                    showNotification(`Ошибка при отправки команды перезагрузки: ${error.message}`, 'bg-red-300');
+                    console.error('Ошибка при отправки команды перезагрузки:', error);
+                }
+            }
+        }
+    }
+
+    async function shutdownAllComputers() {
+        const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+        const selectedComputers = Array.from(computerListCheckboxes).filter(checkbox => checkbox.checked);
+
+        if (selectedComputers.length === 0) {
+            showNotification('Выберите хотя бы один компьютер для выключения', 'bg-red-300');
+            return;
+        }
+        const confirmResult = confirm('Вы уверены, что хотите выключить выбранные компьютеры?');
+        if (!confirmResult) {
+            return;
+        }
+
+        for (let i = 0; i < computerListCheckboxes.length; i++) {
+            const checkbox = computerListCheckboxes[i];
+
+
+            if (checkbox.checked) {
+                const computerRow = checkbox.closest('tr');
+                const computerName = computerRow.querySelector('td:nth-child(2)').textContent; // Индекс столбца с именем компьютера
+
+                try {
+                    const shutdownResponse = await fetch(`/shutdown/${computerName}`, { method: 'GET' });
+                    const shutdownResponseData = await shutdownResponse.json();
+                    if (shutdownResponseData.STATUS === 'OK') {
+                        showNotification(`${computerName} отправлена команда на выключение!`, 'bg-green-300');
+                    } else {
+                        showNotification(`Ошибка при отправки команды выключение: ${JSON.stringify(shutdownResponseData.DATA)}`, 'bg-red-300');
+                        console.error('Ошибка при отправки команды выключение', shutdownResponseData.DATA);
+                    }
+                } catch (error) {
+                    showNotification(`Ошибка при отправки команды выключение: ${error.message}`, 'bg-red-300');
+                    console.error('Ошибка при отправки команды выключение:', error);
+                }
+            }
+        }
+    }
+
+    async function poweronAllComputers() {
+        const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+        const selectedComputers = Array.from(computerListCheckboxes).filter(checkbox => checkbox.checked);
+
+        if (selectedComputers.length === 0) {
+            showNotification('Выберите хотя бы один компьютер для включения', 'bg-red-300');
+            return;
+        }
+        const confirmResult = confirm('Вы уверены, что хотите включить выбранные компьютеры?');
+        if (!confirmResult) {
+            return;
+        }
+
+        for (let i = 0; i < computerListCheckboxes.length; i++) {
+            const checkbox = computerListCheckboxes[i];
+
+
+            if (checkbox.checked) {
+                const computerRow = checkbox.closest('tr');
+                const computerName = computerRow.querySelector('td:nth-child(2)').textContent; // Индекс столбца с именем компьютера
+
+                try {
+                    const poweronResponse = await fetch(`/poweron/${computerName}`, { method: 'GET' });
+                    const poweronResponseData = await poweronResponse.json();
+                    if (poweronResponseData.STATUS === 'OK') {
+                        showNotification(`${computerName} отправлена команда на включение!`, 'bg-green-300');
+                    } else {
+                        showNotification(`Ошибка при отправки команды включение: ${JSON.stringify(poweronResponseData.DATA)}`, 'bg-red-300');
+                        console.error('Ошибка при отправки команды включение', poweronResponseData.DATA);
+                    }
+                } catch (error) {
+                    showNotification(`Ошибка при отправки команды включение: ${error.message}`, 'bg-red-300');
+                    console.error('Ошибка при отправки команды включение:', error);
+                }
+            }
+        }
+    }
+
+    function openExecuteModal() {
+        const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+        const selectedComputers = Array.from(computerListCheckboxes).filter(checkbox => checkbox.checked);
+
+        if (selectedComputers.length === 0) {
+            showNotification('Выберите хотя бы один компьютер для выполнения команды', 'bg-red-300');
+            closeExecuteModal();
+            return;
+        }
+        document.getElementById('executeModal').classList.add('active');
+        document.getElementById('overlay').style.display = 'block';
+    }
+
+    function closeExecuteModal() {
+        document.getElementById('executeModal').classList.remove('active');
+        document.getElementById('overlay').style.display = 'none';
+    }
+
+    async function executeCommand() {
+        const cmdType = document.getElementById('cmdType').value;
+        const command = document.getElementById('command').value;
+        const commandLog = document.getElementById('loggingCheckbox').checked;
+
+        const computerListCheckboxes = document.querySelectorAll('#computer-list input[type="checkbox"]');
+        const selectedComputers = Array.from(computerListCheckboxes).filter(checkbox => checkbox.checked);
+        
+        // Условие для определения типа команды
+        const typeParam = cmdType === 'powershell' ? 'ps' : 'cmd';
+            
+        
+        const confirmResult = confirm(`Вы уверены, что хотите выполнить команду на выбранных компьютерах?`);
+        if (!confirmResult) {
+            return;
+        }
+
+
+        for (let i = 0; i < selectedComputers.length; i++) {
+            const checkbox = selectedComputers[i];
+            const computerRow = checkbox.closest('tr');
+            const computerName = computerRow.querySelector('td:nth-child(2)').textContent; // Индекс столбца с именем компьютера
+
+            try {
+                const executeResponse = await fetch(`/cmd?name=${encodeURIComponent(computerName)}&type=${encodeURIComponent(typeParam)}&command=${encodeURIComponent(command)}&command_log=${commandLog}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                const executeResponseData = await executeResponse.json();
+
+                if (executeResponseData.STATUS === 'OK') {
+                    showNotification(`Команда успешно отправлена на ${computerName}!`, 'bg-green-300');
+                } else {
+                    showNotification(`Ошибка при выполнении команды на ${computerName}: ${JSON.stringify(executeResponseData.DATA)}`, 'bg-red-300');
+                    console.error(`Ошибка при выполнении команды на ${computerName}:`, executeResponseData.DATA);
+                }
+            } catch (error) {
+                showNotification(`Ошибка при выполнении команды на ${computerName}: ${error.message}`, 'bg-red-300');
+                console.error(`Ошибка при выполнении команды на ${computerName}:`, error);
+            }
+        }
+
+        closeExecuteModal();
+    }
+
+
+
+    document.addEventListener('DOMContentLoaded', update);
+    //Ниже вызов update по таймеру
+    setInterval(update, 10000);
+</script>
+
+</body>
+</html>
